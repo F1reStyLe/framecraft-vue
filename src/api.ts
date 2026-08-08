@@ -3,9 +3,14 @@ import type { ApiResult } from '@/types'
 
 interface RequestOptions extends RequestInit {
   token?: string
+  rawUrl?: boolean
 }
 
 function buildUrl(path: string) {
+  if (/^https?:\/\//i.test(path)) {
+    return path
+  }
+
   return `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
 }
 
@@ -28,20 +33,21 @@ export async function apiRequest<T = unknown>(
   path: string,
   options: RequestOptions = {},
 ): Promise<ApiResult<T>> {
-  const url = buildUrl(path)
-  const headers = new Headers(options.headers)
+  const { rawUrl = false, token, ...fetchOptions } = options
+  const url = rawUrl ? path : buildUrl(path)
+  const headers = new Headers(fetchOptions.headers)
 
-  if (options.body && !headers.has('Content-Type')) {
+  if (fetchOptions.body && typeof fetchOptions.body === 'string' && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
 
-  if (options.token) {
-    headers.set('Authorization', `Bearer ${options.token}`)
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
   }
 
   try {
     const response = await fetch(url, {
-      ...options,
+      ...fetchOptions,
       method,
       headers,
     })
@@ -69,7 +75,7 @@ export async function apiRequest<T = unknown>(
         ? {
             message:
               error.name === 'TypeError'
-                ? 'Browser could not read the API response. In local dev this is usually CORS; use VITE_API_BASE_URL=/api or enable CORS on the backend.'
+                ? `Browser could not reach ${url}. Check that the Vite dev server is running on 5173 and the backend/proxy target is available.`
                 : error.message,
             originalMessage: error.message,
             name: error.name,

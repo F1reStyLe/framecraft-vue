@@ -450,6 +450,90 @@ code {
   min-height: 16rem;
 }
 
+.upload-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.upload-box {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.file-summary {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr) auto;
+  gap: 0.85rem;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.file-summary img {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 16px;
+  object-fit: cover;
+  background: #fffaf7;
+}
+
+.file-summary strong,
+.file-summary span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.file-summary span {
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.asset-list {
+  display: grid;
+  gap: 0.8rem;
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+}
+
+.asset-list-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.asset-list-head h3 {
+  margin: 0;
+}
+
+.asset-grid {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.asset-card {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid rgba(236, 222, 218, 0.8);
+  border-radius: 18px;
+  padding: 0.85rem;
+  background: rgba(255, 250, 247, 0.74);
+}
+
+.asset-card strong,
+.asset-card span,
+.asset-card small {
+  overflow-wrap: anywhere;
+}
+
+.asset-card span,
+.asset-card small {
+  color: var(--muted);
+}
+
 .selected-workspace {
   display: grid;
   gap: 1rem;
@@ -542,8 +626,13 @@ dd {
 
   .panel-title,
   .workspace-header,
-  .selected-heading {
+  .selected-heading,
+  .asset-list-head {
     display: grid;
+  }
+
+  .file-summary {
+    grid-template-columns: 1fr;
   }
 
   .button-row,
