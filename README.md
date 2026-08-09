@@ -1,6 +1,7 @@
 # FrameCraft API Test Panel
 
-Minimal Vue 3 + TypeScript frontend for manually testing the local FrameCraft backend.
+Vue 3 + TypeScript MVP frontend for testing the local FrameCraft backend: authentication,
+workspaces, content projects, AI text generations and image media assets.
 
 ## Run locally
 
