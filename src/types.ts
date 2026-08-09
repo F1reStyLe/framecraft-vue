@@ -73,6 +73,104 @@ export interface CompleteMediaUploadResponse {
 
 export interface ListMediaAssetsResponse {
   assets: MediaAsset[]
+  next_cursor?: string
+  page_size: number
+}
+
+export type ContentType =
+  | 'before_after'
+  | 'portfolio'
+  | 'promotion'
+  | 'educational'
+  | 'personal'
+  | 'review'
+  | 'service_description'
+  | 'free_form'
+
+export type ContentProjectStatus = 'draft' | 'ready' | 'archived' | 'deleted'
+
+export interface ContentProject {
+  id: string
+  workspace_id: string
+  title: string
+  status: ContentProjectStatus
+  content_type: ContentType
+  cover_asset_id?: string
+  current_text_version_id?: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ListContentProjectsResponse {
+  projects: ContentProject[]
+}
+
+export type TextTemplateKey =
+  | 'free_form'
+  | 'portfolio_post'
+  | 'promotion'
+  | 'educational_post'
+  | 'review_post'
+
+export interface TextGeneration {
+  id: string
+  workspace_id: string
+  content_project_id: string
+  provider: string
+  model: string
+  template_key: string
+  template_version: string
+  input?: Record<string, unknown>
+  status: 'queued' | 'running' | 'succeeded' | 'failed'
+  prompt_tokens: number
+  completion_tokens: number
+  estimated_cost: string
+  error_code?: string
+  error_message?: string
+  created_by: string
+  created_at: string
+  started_at?: string
+  completed_at?: string
+}
+
+export interface TextVersion {
+  id: string
+  content_project_id: string
+  generation_id?: string
+  source: 'ai' | 'manual'
+  body: string
+  metadata?: Record<string, unknown>
+  created_by: string
+  created_at: string
+}
+
+export interface CreateTextGenerationResponse {
+  generation: TextGeneration
+  text_version: TextVersion
+}
+
+export interface ListTextVersionsResponse {
+  text_versions: TextVersion[]
+}
+
+export interface MediaAssetsSummaryResponse {
+  total: number
+  statuses: Array<{ status: string; count: number }>
+}
+
+export interface CreateMediaDownloadURLResponse {
+  asset: MediaAsset
+  download_url: string
+  download_http_method: 'GET'
+  download_url_expires_at: string
+}
+
+export interface CreateMediaThumbnailURLResponse {
+  asset: MediaAsset
+  thumbnail_url: string
+  thumbnail_http_method: 'GET'
+  thumbnail_url_expires_at: string
 }
 
 export interface ApiDebugSnapshot {
@@ -89,4 +187,23 @@ export interface ApiResult<T = unknown> {
   data: T | null
   error: unknown
   debug: ApiDebugSnapshot
+}
+
+export interface TokenResponse {
+  access_token: string
+  access_token_expires_at: string
+  refresh_token: string
+  refresh_token_expires_at: string
+}
+
+export interface RegisterPayload {
+  username: string
+  email: string
+  password: string
+}
+
+export interface LoginPayload {
+  username?: string
+  email?: string
+  password: string
 }

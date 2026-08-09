@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/config'
+import { getAccessToken, refreshSession } from '@/session'
 import type { ApiResult } from '@/types'
 
 interface RequestOptions extends RequestInit {
@@ -41,8 +42,9 @@ export async function apiRequest<T = unknown>(
     headers.set('Content-Type', 'application/json')
   }
 
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`)
+  const currentToken = token ? getAccessToken() || token : ''
+  if (currentToken) {
+    headers.set('Authorization', `Bearer ${currentToken}`)
   }
 
   try {
@@ -51,6 +53,33 @@ export async function apiRequest<T = unknown>(
       method,
       headers,
     })
+
+    if (response.status === 401 && currentToken) {
+      const refreshedToken = await refreshSession()
+      if (refreshedToken) {
+        headers.set('Authorization', `Bearer ${refreshedToken}`)
+        const retryResponse = await fetch(url, {
+          ...fetchOptions,
+          method,
+          headers,
+        })
+        const retryBody = await parseJsonSafely(retryResponse)
+
+        return {
+          ok: retryResponse.ok,
+          statusCode: retryResponse.status,
+          data: retryResponse.ok ? (retryBody as T) : null,
+          error: retryResponse.ok ? null : retryBody,
+          debug: {
+            method,
+            url,
+            statusCode: retryResponse.status,
+            responseJson: retryResponse.ok ? retryBody : null,
+            errorJson: retryResponse.ok ? null : retryBody,
+          },
+        }
+      }
+    }
 
     const body = await parseJsonSafely(response)
     const data = response.ok ? (body as T) : null

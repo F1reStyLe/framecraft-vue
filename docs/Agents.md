@@ -4,7 +4,7 @@
 
 This repository contains a minimal Vue 3 + TypeScript MVP frontend for manually trying the local FrameCraft backend API.
 
-It is not a production frontend and not a marketing landing page. The current goal is a simple user-facing MVP screen where someone can paste a JWT token, create a workspace, refresh the workspace list, and inspect the selected workspace.
+It is not a production frontend and not a marketing landing page. The current goal is a simple user-facing MVP screen where someone can register or log in through Auth Service, create a workspace, refresh the workspace list, and inspect the selected workspace.
 
 FrameCraft product context:
 
@@ -32,11 +32,16 @@ OpenAPI YAML:
 http://localhost:8180/swagger/openapi.yaml
 ```
 
-The implementation was aligned with the OpenAPI contract provided at:
+The backend OpenAPI contracts are the source of truth for frontend API work. Always check them before implementing or changing an endpoint integration:
 
 ```text
-C:/Users/iwgw/Downloads/openapi.yaml
+C:/Users/ulian/Desktop/Git/FrameCraft/openapi/openapi.yaml
+C:/Users/ulian/Desktop/Git/authserver/internal/transport/http/swagger/openapi.yaml
 ```
+
+FrameCraft API runs locally at `http://localhost:8180`. Auth Service API runs locally at `http://localhost:8080` and is proxied by Vite from `/auth-api`.
+
+Do not duplicate Auth Service password-validity rules in the frontend. Send the password to Auth Service and display its validation error response to the user.
 
 ## Implemented frontend stack
 
@@ -71,7 +76,7 @@ The first viewport should feel like a small FrameCraft workspace product surface
 
 Primary flow:
 
-1. Paste and save JWT token.
+1. Register or log in through the toolbar.
 2. Create a workspace.
 3. Refresh/list workspaces.
 4. Select a workspace card and view details.
@@ -88,11 +93,12 @@ The current screen includes:
    - automatically checked on mount
    - displayed as a compact backend readiness state
 
-2. JWT Token
-   - manual access-token textarea
-   - Save Token
-   - Clear Token
-   - token is stored in `localStorage`
+2. Authentication toolbar
+   - registration with username, email, and password
+   - login by email or username and password
+   - logout revokes the refresh session
+   - access and refresh tokens are stored in `localStorage`
+   - password validity is checked only by Auth Service
 
 3. Create Workspace
    - `POST /v1/workspaces`
@@ -137,7 +143,7 @@ Protected requests send:
 Authorization: Bearer <saved-token>
 ```
 
-Auth service, registration, login, refresh token, and user management are intentionally not implemented.
+Registration, login, and logout are implemented through Auth Service. Access and refresh tokens are stored in `localStorage`; protected FrameCraft requests use the saved access token.
 
 Important identity detail:
 
@@ -257,13 +263,18 @@ Generated folders such as `node_modules` and `dist` exist locally after install/
 
 ## Deliberately not implemented
 
-- registration/login UI
-- refresh token flow
+- automatic refresh token flow
 - user management
 - mocked backend responses
 - routing
 - global state store
-- media API UI
 - explicit manual `GET /v1/workspaces/{workspaceID}` panel
 
-Media endpoints exist in the provided OpenAPI contract, but detailed request/response schemas were not defined, so the minimal test panel currently focuses on health and workspace endpoints only.
+## Content and media API coverage
+
+The MVP UI now covers content project creation/listing, status updates, deletion, text generation,
+and text-version listing. Structured generation input is validated as JSON and against the 16 KiB
+contract limit.
+
+Media UI supports image-only upload, cursor pagination, workspace summary, original/thumbnail
+presigned links, and soft deletion. The browser input follows the backend `image/*` MIME restriction.
