@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 
 import { apiRequest } from '@/api'
 import { authRequest } from '@/auth-api'
@@ -50,34 +50,9 @@ const authNotice = ref('')
 const currentView = ref<'home' | 'text' | 'image' | 'publish' | 'profile'>('home')
 const avatarDataUrl = ref(localStorage.getItem('framecraft.avatar') || '')
 const avatarError = ref('')
-const avatarFileName = ref('Файл не выбран')
 const loginForm = reactive({ identifier: '', password: '' })
 const registerForm = reactive<RegisterPayload>({ username: '', email: '', password: '' })
 const registerPasswordConfirmation = ref('')
-
-interface GptProfileSettings {
-  name: string; occupation: string; services: string; city: string; address: string; audiences: string[]
-  ageMin: number; ageMax: number; advantage: string; addressStyle: '' | 'ты' | 'вы'
-  emojiLevel: '' | 'none' | 'few' | 'medium' | 'many'; useHashtags: '' | 'yes' | 'no'
-  forbiddenTopics: string; postSignature: string; contacts: string; bookingUrl: string
-}
-const defaultGptProfile: GptProfileSettings = {
-  name: '', occupation: '', services: '', city: '', address: '', audiences: [], ageMin: 18, ageMax: 65,
-  advantage: '', addressStyle: '', emojiLevel: '', useHashtags: '',
-  forbiddenTopics: '', postSignature: '', contacts: '', bookingUrl: '',
-}
-const storedGptProfile = localStorage.getItem('framecraft.gpt-profile')
-const gptProfile = reactive<GptProfileSettings>({ ...defaultGptProfile, ...(storedGptProfile ? JSON.parse(storedGptProfile) as Partial<GptProfileSettings> : {}) })
-const gptProfileSaved = ref(false)
-const audienceOptions = ['Дети', 'Подростки', 'Женщины', 'Мужчины', 'Старшее поколение']
-const openProfileSelect = ref<'address' | 'emoji' | 'hashtags' | null>(null)
-const addressOptions = [{ value: '', label: 'не выбрано' }, { value: 'ты', label: 'на ТЫ' }, { value: 'вы', label: 'на ВЫ' }] as const
-const emojiOptions = [{ value: '', label: 'не выбрано' }, { value: 'none', label: 'нет' }, { value: 'few', label: 'немного' }, { value: 'medium', label: 'средне' }, { value: 'many', label: 'много' }] as const
-const hashtagOptions = [{ value: '', label: 'не выбрано' }, { value: 'yes', label: 'да' }, { value: 'no', label: 'нет' }] as const
-
-function selectedOptionLabel(options: ReadonlyArray<{ value: string; label: string }>, value: string) {
-  return options.find((option) => option.value === value)?.label ?? 'Не выбрано'
-}
 
 const form = reactive<WorkspacePayload>({
   name: 'My Beauty Studio',
@@ -127,47 +102,6 @@ const generationForm = reactive<{ template_key: TextTemplateKey; topic: string; 
 })
 const isGeneratingText = ref(false)
 const generationError = ref('')
-const chatScroll = ref<HTMLElement | null>(null)
-const chatTextarea = ref<HTMLTextAreaElement | null>(null)
-const isListening = ref(false)
-const speechError = ref('')
-
-interface SpeechRecognitionEventLike extends Event {
-  results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }>
-  resultIndex: number
-}
-
-interface SpeechRecognitionLike {
-  lang: string
-  continuous: boolean
-  interimResults: boolean
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null
-  onerror: ((event: Event & { error?: string }) => void) | null
-  onend: (() => void) | null
-  start: () => void
-  stop: () => void
-}
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
-let speechRecognition: SpeechRecognitionLike | null = null
-
-interface ChatPrompt {
-  id: string
-  projectID: string
-  body: string
-  createdAt: string
-}
-
-const chatPrompts = ref<ChatPrompt[]>(JSON.parse(localStorage.getItem('framecraft.chat-prompts') || '[]'))
-
-const chatMessages = computed(() => {
-  if (!selectedProject.value) return []
-  const prompts = chatPrompts.value
-    .filter((message) => message.projectID === selectedProject.value?.id)
-    .map((message) => ({ id: message.id, role: 'user' as const, body: message.body, createdAt: message.createdAt }))
-  const answers = textVersions.value.map((version) => ({ id: version.id, role: 'assistant' as const, body: version.body, createdAt: version.created_at }))
-  return [...prompts, ...answers].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-})
 
 const hasToken = computed(() => savedToken.value.trim().length > 0)
 
@@ -337,17 +271,12 @@ function openProfile() {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-function openIntroVideo() {
-  window.open('https://www.youtube.com/watch?v=DeQqqlzgxfI', '_blank', 'noopener,noreferrer')
-}
-
 function selectAvatar(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   avatarError.value = ''
 
   if (!file) return
-  avatarFileName.value = file.name
   if (!file.type.startsWith('image/')) {
     avatarError.value = 'Выберите изображение.'
     return
@@ -769,113 +698,6 @@ async function loadTextVersions() {
   setLastResponse(result)
   textVersions.value = result.ok ? result.data?.text_versions ?? [] : []
   if (!result.ok) generationError.value = extractErrorMessage(result.error, 'Не удалось загрузить версии текста.')
-  await scrollChatToBottom()
-}
-
-function toggleAudience(audience: string) {
-  const index = gptProfile.audiences.indexOf(audience)
-  if (index >= 0) gptProfile.audiences.splice(index, 1)
-  else gptProfile.audiences.push(audience)
-}
-
-function saveGptProfile() {
-  localStorage.setItem('framecraft.gpt-profile', JSON.stringify(gptProfile))
-  gptProfileSaved.value = true
-  window.setTimeout(() => { gptProfileSaved.value = false }, 2500)
-}
-
-function setMinimumAge(event: Event) {
-  const value = Number((event.target as HTMLInputElement).value)
-  gptProfile.ageMin = Math.min(value, gptProfile.ageMax - 1)
-}
-
-function setMaximumAge(event: Event) {
-  const value = Number((event.target as HTMLInputElement).value)
-  gptProfile.ageMax = Math.max(value, gptProfile.ageMin + 1)
-}
-
-function saveChatPrompts() {
-  localStorage.setItem('framecraft.chat-prompts', JSON.stringify(chatPrompts.value))
-}
-
-async function scrollChatToBottom(behavior: ScrollBehavior = 'smooth') {
-  await nextTick()
-  chatScroll.value?.scrollTo({ top: chatScroll.value.scrollHeight, behavior })
-}
-
-watch(
-  () => [currentView.value, selectedProject.value?.id, chatMessages.value.length],
-  async () => {
-    if (currentView.value === 'text') await scrollChatToBottom('auto')
-  },
-  { flush: 'post' },
-)
-
-function handleChatKeydown(event: KeyboardEvent) {
-  if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventDefault()
-    void generateText()
-  }
-}
-
-function resizeChatTextarea() {
-  const textarea = chatTextarea.value
-  if (!textarea) return
-  textarea.style.height = 'auto'
-  const styles = window.getComputedStyle(textarea)
-  const lineHeight = Number.parseFloat(styles.lineHeight) || 24
-  const verticalPadding = Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom)
-  const maxHeight = lineHeight * 10 + verticalPadding
-  textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`
-  textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden'
-}
-
-function toggleSpeechInput() {
-  if (isListening.value) {
-    speechRecognition?.stop()
-    return
-  }
-
-  const speechWindow = window as typeof window & {
-    SpeechRecognition?: SpeechRecognitionConstructor
-    webkitSpeechRecognition?: SpeechRecognitionConstructor
-  }
-  const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition
-  speechError.value = ''
-
-  if (!Recognition) {
-    speechError.value = 'Ваш браузер не поддерживает голосовой ввод.'
-    return
-  }
-
-  speechRecognition = new Recognition()
-  speechRecognition.lang = 'ru-RU'
-  speechRecognition.continuous = true
-  speechRecognition.interimResults = false
-  speechRecognition.onresult = (event) => {
-    let transcript = ''
-    for (let index = event.resultIndex; index < event.results.length; index += 1) {
-      if (event.results[index].isFinal) transcript += event.results[index][0].transcript
-    }
-    if (!transcript.trim()) return
-    const separator = generationForm.topic.trim() ? ' ' : ''
-    generationForm.topic += `${separator}${transcript.trim()}`
-    void nextTick(resizeChatTextarea)
-  }
-  speechRecognition.onerror = (event) => {
-    isListening.value = false
-    speechError.value = event.error === 'not-allowed'
-      ? 'Разрешите доступ к микрофону в настройках браузера.'
-      : 'Не удалось распознать речь. Попробуйте ещё раз.'
-  }
-  speechRecognition.onend = () => { isListening.value = false }
-
-  try {
-    speechRecognition.start()
-    isListening.value = true
-  } catch {
-    speechError.value = 'Не удалось включить микрофон.'
-  }
 }
 
 async function generateText() {
@@ -892,25 +714,12 @@ async function generateText() {
     return
   }
   input.topic = generationForm.topic.trim()
-  input.profile = { ...gptProfile }
   if (new TextEncoder().encode(JSON.stringify(input)).length > 16 * 1024) {
     generationError.value = 'JSON input превышает ограничение 16 КиБ.'
     return
   }
   isGeneratingText.value = true
   generationError.value = ''
-  const prompt: ChatPrompt = {
-    id: `prompt-${Date.now()}`,
-    projectID: selectedProject.value.id,
-    body: generationForm.topic.trim(),
-    createdAt: new Date().toISOString(),
-  }
-  chatPrompts.value.push(prompt)
-  saveChatPrompts()
-  generationForm.topic = ''
-  await nextTick()
-  resizeChatTextarea()
-  await scrollChatToBottom()
   const result = await apiRequest<CreateTextGenerationResponse>('POST', `/v1/content-projects/${selectedProject.value.id}/text-generations`, {
     token: savedToken.value,
     body: JSON.stringify({ template_key: generationForm.template_key, input }),
@@ -919,7 +728,6 @@ async function generateText() {
   if (result.ok && result.data) textVersions.value = [result.data.text_version, ...textVersions.value]
   else generationError.value = extractErrorMessage(result.error, 'Не удалось сгенерировать текст.')
   isGeneratingText.value = false
-  await scrollChatToBottom()
 }
 
 async function uploadFile() {
@@ -1011,12 +819,11 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener(SESSION_CHANGED_EVENT, syncSession)
-  speechRecognition?.stop()
 })
 </script>
 
 <template>
-  <main class="app-shell" :class="{ 'text-view': currentView === 'text', 'home-view': currentView === 'home' }">
+  <main class="app-shell">
     <header class="app-toolbar">
       <a class="brand" href="/" aria-label="PostFlow" @click="openHome">
         <img :src="postFlowLogo" alt="PostFlow" />
@@ -1066,7 +873,7 @@ onBeforeUnmount(() => {
             <p class="hero-intro">PostFlow объединяет весь процесс работы с контентом в одном сервисе — создание текста, изображений, сбор поста и публикация во всех соцсетях.</p>
             <div class="hero-actions">
               <button type="button" @click="openWorkflowStep('text')">✦ Создать пост</button>
-              <button type="button" class="hero-secondary" @click="openIntroVideo"><span>▶</span> Смотреть видео</button>
+              <button type="button" class="hero-secondary" @click="openWorkflowStep('publish')"><span>▶</span> Смотреть видео</button>
             </div>
           </div>
           <div class="hero-visual">
@@ -1075,19 +882,19 @@ onBeforeUnmount(() => {
         </div>
         <div class="how-grid">
           <article class="how-step">
-            <span class="how-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m4 20 4.2-1 10.9-10.9a2.1 2.1 0 0 0-3-3L5.2 16 4 20Z"/><path d="m14.7 6.5 2.8 2.8"/></svg></span>
+            <span class="how-icon" aria-hidden="true">✏️</span>
             <div><strong>Создайте текст</strong><p>Опишите тему или идею — AI подготовит текст поста под вашу задачу, аудиторию и стиль.</p></div>
           </article>
           <article class="how-step">
-            <span class="how-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1.5"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 18 5-5 3.5 3.5 2.5-2.5 5 5"/></svg></span>
-            <div><strong>Создайте изображение</strong><p>Сгенерируйте уникальный визуал для публикации прямо в PostFlow.</p></div>
+            <span class="how-icon" aria-hidden="true">🖼️</span>
+            <div><strong>Создайте изображение</strong><p>Сгенерируйте подходящий визуал для публикации прямо в PostFlow.</p></div>
           </article>
           <article class="how-step">
-            <span class="how-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2c.8 5.3 2.7 7.2 8 8-5.3.8-7.2 2.7-8 8-.8-5.3-2.7-7.2-8-8 5.3-.8 7.2-2.7 8-8Z"/><path d="M19 16c.3 2 1 2.7 3 3-2 .3-2.7 1-3 3-.3-2-1-2.7-3-3 2-.3 2.7-1 3-3Z"/></svg></span>
+            <span class="how-icon" aria-hidden="true">✨</span>
             <div><strong>Соберите готовый пост</strong><p>Объедините текст и изображение, отредактируйте результат и посмотрите, как будет выглядеть публикация.</p></div>
           </article>
           <article class="how-step">
-            <span class="how-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4 20-7Z"/><path d="M22 2 11 13"/></svg></span>
+            <span class="how-icon" aria-hidden="true">🚀</span>
             <div><strong>Опубликуйте везде</strong><p>Выберите нужные социальные сети и опубликуйте пост сразу или запланируйте его на удобное время.</p></div>
           </article>
         </div>
@@ -1195,55 +1002,7 @@ onBeforeUnmount(() => {
           </div>
         </article>
 
-        <article v-if="currentView === 'text'" id="text-creation" class="text-chat">
-          <header class="chat-header">
-            <div class="chat-heading"><span class="ai-avatar">✦</span><div><h2>Создай текст</h2><p>{{ selectedProject ? selectedProject.title : 'AI-помощник для ваших публикаций' }}</p></div></div>
-          </header>
-
-          <div v-if="!selectedProject" class="chat-empty-setup">
-            <span class="empty-sparkle">✦</span><h2>О чём напишем сегодня?</h2>
-            <p>PostFlow превратит вашу идею в готовый пост.</p>
-            <form v-if="selectedWorkspace" class="new-chat-project" @submit.prevent="createProject">
-              <input v-model="projectForm.title" type="text" maxlength="160" placeholder="Название проекта" required />
-              <button type="submit" :disabled="isCreatingProject">{{ isCreatingProject ? 'Создаю…' : 'Создать проект' }}</button>
-            </form>
-            <p v-else class="error-message">Войдите в аккаунт — и создавайте контент легко, быстро и с вдохновением.</p>
-            <p v-if="projectError" class="error-message">{{ projectError }}</p>
-          </div>
-
-          <template v-else>
-            <div ref="chatScroll" class="chat-history" aria-live="polite">
-              <div v-if="!chatMessages.length" class="chat-welcome">
-                <span class="ai-avatar large">✦</span><h3>Привет! Я помогу создать текст</h3>
-                <p>Опишите тему, задачу или идею публикации. Можно указать аудиторию, тон и важные детали.</p>
-              </div>
-              <article v-for="message in chatMessages" :key="message.id" class="chat-row" :class="message.role">
-                <span v-if="message.role === 'assistant'" class="message-avatar">✦</span>
-                <div class="chat-message"><p>{{ message.body }}</p><time>{{ formatDate(message.createdAt) }}</time></div>
-                <span v-if="message.role === 'user'" class="message-avatar user-avatar">{{ authAvatarLetter }}</span>
-              </article>
-              <article v-if="isGeneratingText" class="chat-row assistant">
-                <span class="message-avatar">✦</span><div class="chat-message typing"><i></i><i></i><i></i></div>
-              </article>
-            </div>
-            <footer class="chat-composer-wrap">
-              <p v-if="generationError" class="error-message chat-error">{{ generationError }}</p>
-              <p v-if="speechError" class="error-message chat-error">{{ speechError }}</p>
-              <div class="chat-composer">
-                <textarea ref="chatTextarea" v-model="generationForm.topic" rows="1" placeholder="Напишите, какой текст хотите создать…" aria-label="Сообщение" @input="resizeChatTextarea" @keydown="handleChatKeydown" />
-                <button type="button" class="mic-button" :class="{ listening: isListening }" :aria-label="isListening ? 'Остановить голосовой ввод' : 'Начать голосовой ввод'" :title="isListening ? 'Остановить запись' : 'Голосовой ввод'" @click="toggleSpeechInput">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6"/></svg>
-                </button>
-                <button type="button" class="send-button" :disabled="isGeneratingText || !generationForm.topic.trim()" aria-label="Отправить сообщение" @click="generateText">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6-7-1Z"/><path d="m12 13 7-8"/></svg>
-                </button>
-              </div>
-              <small>Enter — отправить · Shift + Enter — новая строка</small>
-            </footer>
-          </template>
-        </article>
-
-        <article v-if="false" class="panel content-panel">
+        <article v-if="currentView === 'text'" id="text-creation" class="panel content-panel">
           <div class="panel-title">
             <span class="step">2</span>
             <div><h2>Контент-проекты</h2><p>Создавайте публикации и генерируйте версии текста.</p></div>
@@ -1272,7 +1031,7 @@ onBeforeUnmount(() => {
             <p v-if="!projects.length && !isLoadingProjects" class="muted">Контент-проектов пока нет.</p>
           </div>
           <div v-if="selectedProject" class="generation-box">
-            <div class="asset-list-head"><div><p class="eyebrow">Генерация текста</p><h3>{{ selectedProject?.title }}</h3></div><button type="button" class="secondary small" @click="loadTextVersions">Обновить версии</button></div>
+            <div class="asset-list-head"><div><p class="eyebrow">Генерация текста</p><h3>{{ selectedProject.title }}</h3></div><button type="button" class="secondary small" @click="loadTextVersions">Обновить версии</button></div>
             <div class="asset-actions">
               <button type="button" class="secondary small" @click="updateProjectStatus('draft')">Черновик</button>
               <button type="button" class="secondary small" @click="updateProjectStatus('ready')">Готов</button>
@@ -1373,40 +1132,22 @@ onBeforeUnmount(() => {
       </section>
     </section>
 
-    <section v-if="currentView === 'profile'" class="profile-layout">
-      <aside class="panel profile-sidebar">
-        <div class="profile-avatar-large"><img v-if="avatarDataUrl" :src="avatarDataUrl" alt="Текущая аватарка" /><span v-else>{{ authAvatarLetter }}</span></div>
-        <div><p class="eyebrow">Профиль</p><h2>{{ authDisplayName }}</h2></div>
-        <label class="avatar-upload">Новая аватарка<span class="avatar-file-picker">Выбрать файл</span><input type="file" accept="image/*" @change="selectAvatar" /><small>{{ avatarFileName }}</small></label>
-        <p class="form-hint">PNG, JPEG или WebP, до 3 МБ.</p><p v-if="avatarError" class="error-message">{{ avatarError }}</p>
-      </aside>
-      <form class="panel gpt-profile-form" @submit.prevent="saveGptProfile">
-        <header class="gpt-profile-header"><div><p class="eyebrow">Персонализация AI</p><h2>Настройки для профессиональных текстов</h2><p class="muted">GPT будет учитывать эти данные при создании каждого ответа.</p></div><span class="ai-avatar">✦</span></header>
-        <div class="profile-fields two-columns">
-          <label>Как вас зовут?<input v-model="gptProfile.name" type="text" placeholder="Например, Анна" /></label>
-          <label>Чем вы занимаетесь?<input v-model="gptProfile.occupation" type="text" placeholder="Мастер маникюра, фотограф…" /></label>
-          <label>Какие услуги оказываете?<input v-model="gptProfile.services" type="text" placeholder="Перечислите основные услуги" /></label>
-          <label>Город<input v-model="gptProfile.city" type="text" placeholder="Москва" /></label>
-          <label class="full-span">Адрес<input v-model="gptProfile.address" type="text" placeholder="Улица, дом, район или ориентир" /></label>
-        </div>
-        <div class="audience-settings">
-          <fieldset><legend>Кто ваши клиенты?</legend><div class="audience-options"><label v-for="audience in audienceOptions" :key="audience" class="check-chip" :class="{ active: gptProfile.audiences.includes(audience) }"><input type="checkbox" :checked="gptProfile.audiences.includes(audience)" @change="toggleAudience(audience)" />{{ audience }}</label></div></fieldset>
-          <fieldset class="age-range"><legend>Возраст: {{ gptProfile.ageMin }}–{{ gptProfile.ageMax }} лет</legend><div class="dual-range" :style="{ '--age-min': `${gptProfile.ageMin / 90 * 100}%`, '--age-max': `${gptProfile.ageMax / 90 * 100}%` }"><div class="range-track"></div><input :value="gptProfile.ageMin" type="range" min="0" max="90" aria-label="Минимальный возраст" @input="setMinimumAge" /><input :value="gptProfile.ageMax" type="range" min="0" max="90" aria-label="Максимальный возраст" @input="setMaximumAge" /></div><div class="range-labels"><span>0 лет</span><span>90 лет</span></div></fieldset>
-        </div>
-        <label>В чём ваше преимущество?<textarea v-model="gptProfile.advantage" rows="3" placeholder="Опишите опыт, подход, особенности и сильные стороны" /></label>
-        <div class="profile-fields three-columns">
-          <label>Обращение к аудитории<div class="profile-custom-select" :class="{ open: openProfileSelect === 'address' }"><button type="button" class="custom-select-trigger" :class="{ placeholder: !gptProfile.addressStyle }" @click="openProfileSelect = openProfileSelect === 'address' ? null : 'address'"><span>{{ selectedOptionLabel(addressOptions, gptProfile.addressStyle) }}</span><i></i></button><div v-if="openProfileSelect === 'address'" class="custom-select-menu"><button v-for="option in addressOptions" :key="option.value" type="button" :class="{ selected: gptProfile.addressStyle === option.value, placeholder: !option.value }" @click="gptProfile.addressStyle = option.value; openProfileSelect = null">{{ option.label }}<span v-if="gptProfile.addressStyle === option.value">✓</span></button></div></div></label>
-          <label>Использовать эмодзи?<div class="profile-custom-select" :class="{ open: openProfileSelect === 'emoji' }"><button type="button" class="custom-select-trigger" :class="{ placeholder: !gptProfile.emojiLevel }" @click="openProfileSelect = openProfileSelect === 'emoji' ? null : 'emoji'"><span>{{ selectedOptionLabel(emojiOptions, gptProfile.emojiLevel) }}</span><i></i></button><div v-if="openProfileSelect === 'emoji'" class="custom-select-menu"><button v-for="option in emojiOptions" :key="option.value" type="button" :class="{ selected: gptProfile.emojiLevel === option.value, placeholder: !option.value }" @click="gptProfile.emojiLevel = option.value; openProfileSelect = null">{{ option.label }}<span v-if="gptProfile.emojiLevel === option.value">✓</span></button></div></div></label>
-          <label>Использовать хэштеги?<div class="profile-custom-select" :class="{ open: openProfileSelect === 'hashtags' }"><button type="button" class="custom-select-trigger" :class="{ placeholder: !gptProfile.useHashtags }" @click="openProfileSelect = openProfileSelect === 'hashtags' ? null : 'hashtags'"><span>{{ selectedOptionLabel(hashtagOptions, gptProfile.useHashtags) }}</span><i></i></button><div v-if="openProfileSelect === 'hashtags'" class="custom-select-menu"><button v-for="option in hashtagOptions" :key="option.value" type="button" :class="{ selected: gptProfile.useHashtags === option.value, placeholder: !option.value }" @click="gptProfile.useHashtags = option.value; openProfileSelect = null">{{ option.label }}<span v-if="gptProfile.useHashtags === option.value">✓</span></button></div></div></label>
-        </div>
-        <div class="profile-fields two-columns">
-          <label>Что нельзя писать?<textarea v-model="gptProfile.forbiddenTopics" rows="2" placeholder="Стоп-слова, темы и обещания" /></label>
-          <label>Как подписывать посты?<textarea v-model="gptProfile.postSignature" rows="2" placeholder="Имя, бренд или готовая подпись" /></label>
-          <label>Контакты<input v-model="gptProfile.contacts" type="text" placeholder="Телефон, Telegram, WhatsApp" /></label>
-          <label>Ссылка для записи<input v-model="gptProfile.bookingUrl" type="url" placeholder="https://…" /></label>
-        </div>
-        <div class="profile-save-row"><p v-if="gptProfileSaved" class="success-message">Настройки сохранены</p><button type="submit">Сохранить настройки</button></div>
-      </form>
+    <section v-if="currentView === 'profile'" class="panel profile-page">
+      <div>
+        <p class="eyebrow">Профиль</p>
+        <h2>{{ authDisplayName }}</h2>
+        <p class="muted">Здесь можно установить новую аватарку.</p>
+      </div>
+      <div class="profile-avatar-large">
+        <img v-if="avatarDataUrl" :src="avatarDataUrl" alt="Текущая аватарка" />
+        <span v-else>{{ authAvatarLetter }}</span>
+      </div>
+      <label class="avatar-upload">
+        Новая аватарка
+        <input type="file" accept="image/*" @change="selectAvatar" />
+      </label>
+      <p class="form-hint">PNG, JPEG или WebP, до 3 МБ.</p>
+      <p v-if="avatarError" class="error-message">{{ avatarError }}</p>
     </section>
 
     <section v-if="currentView === 'home'" class="debug-drawer">
