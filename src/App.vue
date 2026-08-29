@@ -61,6 +61,17 @@ const avatarError = ref('')
 const avatarFileName = ref('Файл не выбран')
 const isLoadingAvatar = ref(false)
 const isUploadingAvatar = ref(false)
+const isAvatarModalOpen = ref(false)
+const avatarModal = ref<HTMLElement | null>(null)
+const avatarEditorCanvas = ref<HTMLCanvasElement | null>(null)
+const avatarEditorImage = ref<HTMLImageElement | null>(null)
+const avatarEditorZoom = ref(1)
+const avatarEditorRotation = ref(0)
+const avatarEditorOffset = reactive({ x: 0, y: 0 })
+let avatarEditorObjectUrl = ''
+let avatarTrigger: HTMLElement | null = null
+let avatarDragPointer: number | null = null
+let avatarDragPosition = { x: 0, y: 0 }
 const loginForm = reactive({ identifier: '', password: '' })
 const registerForm = reactive<RegisterPayload>({ username: '', email: '', password: '' })
 const registerPasswordConfirmation = ref('')
@@ -342,7 +353,164 @@ async function loadCurrentUserProfile() {
   isLoadingAvatar.value = false
 }
 
-async function selectAvatar(event: Event) {
+function revokeAvatarEditorObjectUrl() {
+  if (avatarEditorObjectUrl) {
+    URL.revokeObjectURL(avatarEditorObjectUrl)
+    avatarEditorObjectUrl = ''
+  }
+}
+
+function openAvatarModal() {
+  avatarTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  avatarError.value = ''
+  avatarFileName.value = 'Файл не выбран'
+  isAvatarModalOpen.value = true
+  void nextTick(() => avatarModal.value?.querySelector<HTMLElement>('button, input')?.focus())
+}
+
+function closeAvatarModal() {
+  if (isUploadingAvatar.value) return
+
+  isAvatarModalOpen.value = false
+  avatarEditorImage.value = null
+  avatarEditorZoom.value = 1
+  avatarEditorRotation.value = 0
+  avatarEditorOffset.x = 0
+  avatarEditorOffset.y = 0
+  avatarDragPointer = null
+  revokeAvatarEditorObjectUrl()
+  void nextTick(() => avatarTrigger?.focus())
+}
+
+function handleAvatarKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeAvatarModal()
+    return
+  }
+
+  if (event.key !== 'Tab' || !avatarModal.value) return
+
+  const focusable = Array.from(
+    avatarModal.value.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+    ),
+  )
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  if (!first || !last) return
+
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+function avatarEditorDimensions(image: HTMLImageElement) {
+  const quarterTurn = Math.abs(avatarEditorRotation.value / 90) % 2 === 1
+  return quarterTurn
+    ? { width: image.naturalHeight, height: image.naturalWidth }
+    : { width: image.naturalWidth, height: image.naturalHeight }
+}
+
+function constrainAvatarOffset() {
+  const image = avatarEditorImage.value
+  const canvas = avatarEditorCanvas.value
+  if (!image || !canvas) return
+
+  const rotated = avatarEditorDimensions(image)
+  const scale = Math.max(canvas.width / rotated.width, canvas.height / rotated.height) * avatarEditorZoom.value
+  const maxX = Math.max(0, (rotated.width * scale - canvas.width) / 2)
+  const maxY = Math.max(0, (rotated.height * scale - canvas.height) / 2)
+  avatarEditorOffset.x = Math.max(-maxX, Math.min(maxX, avatarEditorOffset.x))
+  avatarEditorOffset.y = Math.max(-maxY, Math.min(maxY, avatarEditorOffset.y))
+}
+
+function drawAvatarEditor() {
+  const image = avatarEditorImage.value
+  const canvas = avatarEditorCanvas.value
+  if (!image || !canvas) return
+
+  constrainAvatarOffset()
+  const context = canvas.getContext('2d')
+  if (!context) return
+
+  const rotated = avatarEditorDimensions(image)
+  const scale = Math.max(canvas.width / rotated.width, canvas.height / rotated.height) * avatarEditorZoom.value
+  context.clearRect(0, 0, canvas.width, canvas.height)
+  context.save()
+  context.translate(canvas.width / 2 + avatarEditorOffset.x, canvas.height / 2 + avatarEditorOffset.y)
+  context.rotate((avatarEditorRotation.value * Math.PI) / 180)
+  context.drawImage(
+    image,
+    -(image.naturalWidth * scale) / 2,
+    -(image.naturalHeight * scale) / 2,
+    image.naturalWidth * scale,
+    image.naturalHeight * scale,
+  )
+  context.restore()
+}
+
+function resetAvatarEditor() {
+  avatarEditorZoom.value = 1
+  avatarEditorRotation.value = 0
+  avatarEditorOffset.x = 0
+  avatarEditorOffset.y = 0
+  drawAvatarEditor()
+}
+
+function rotateAvatarEditor(direction: -1 | 1) {
+  avatarEditorRotation.value = (avatarEditorRotation.value + direction * 90 + 360) % 360
+  avatarEditorOffset.x = 0
+  avatarEditorOffset.y = 0
+  drawAvatarEditor()
+}
+
+function updateAvatarZoom() {
+  drawAvatarEditor()
+}
+
+function startAvatarDrag(event: PointerEvent) {
+  if (!avatarEditorImage.value) return
+  avatarDragPointer = event.pointerId
+  avatarDragPosition = { x: event.clientX, y: event.clientY }
+  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+}
+
+function moveAvatarDrag(event: PointerEvent) {
+  if (avatarDragPointer !== event.pointerId || !avatarEditorCanvas.value) return
+
+  const bounds = avatarEditorCanvas.value.getBoundingClientRect()
+  avatarEditorOffset.x += (event.clientX - avatarDragPosition.x) * (avatarEditorCanvas.value.width / bounds.width)
+  avatarEditorOffset.y += (event.clientY - avatarDragPosition.y) * (avatarEditorCanvas.value.height / bounds.height)
+  avatarDragPosition = { x: event.clientX, y: event.clientY }
+  drawAvatarEditor()
+}
+
+function stopAvatarDrag(event: PointerEvent) {
+  if (avatarDragPointer === event.pointerId) avatarDragPointer = null
+}
+
+function moveAvatarWithKeyboard(event: KeyboardEvent) {
+  const direction = {
+    ArrowLeft: { x: -1, y: 0 },
+    ArrowRight: { x: 1, y: 0 },
+    ArrowUp: { x: 0, y: -1 },
+    ArrowDown: { x: 0, y: 1 },
+  }[event.key]
+  if (!direction) return
+
+  event.preventDefault()
+  const distance = event.shiftKey ? 24 : 8
+  avatarEditorOffset.x += direction.x * distance
+  avatarEditorOffset.y += direction.y * distance
+  drawAvatarEditor()
+}
+
+function selectAvatar(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   avatarError.value = ''
@@ -360,19 +528,55 @@ async function selectAvatar(event: Event) {
     return
   }
 
+  revokeAvatarEditorObjectUrl()
+  avatarEditorObjectUrl = URL.createObjectURL(file)
+  const objectUrl = avatarEditorObjectUrl
+  const image = new Image()
+  image.onload = () => {
+    if (!isAvatarModalOpen.value || avatarEditorObjectUrl !== objectUrl) return
+    avatarEditorImage.value = image
+    resetAvatarEditor()
+    void nextTick(drawAvatarEditor)
+  }
+  image.onerror = () => {
+    if (avatarEditorObjectUrl !== objectUrl) return
+    avatarError.value = 'Не удалось открыть изображение. Попробуйте выбрать другой файл.'
+    revokeAvatarEditorObjectUrl()
+  }
+  image.src = objectUrl
+  input.value = ''
+}
+
+function avatarCanvasBlob(canvas: HTMLCanvasElement) {
+  return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/webp', 0.9))
+}
+
+async function saveAvatar() {
+  const canvas = avatarEditorCanvas.value
+  if (!canvas || !avatarEditorImage.value) return
+
+  avatarError.value = ''
+  drawAvatarEditor()
+  const blob = await avatarCanvasBlob(canvas)
+  if (!blob) {
+    avatarError.value = 'Не удалось обработать изображение.'
+    return
+  }
+
   isUploadingAvatar.value = true
   const requestSequence = ++avatarRequestSequence
-  const result = await uploadUserAvatar(file)
+  const result = await uploadUserAvatar(new File([blob], 'avatar.webp', { type: 'image/webp' }))
 
   if (requestSequence === avatarRequestSequence && hasToken.value) {
     if (result.ok && result.data) {
       avatarDataUrl.value = result.data.avatar_url ?? ''
+      isUploadingAvatar.value = false
+      closeAvatarModal()
     } else {
       avatarError.value = extractErrorMessage(result.error, 'Не удалось сохранить аватар.')
+      isUploadingAvatar.value = false
     }
-    isUploadingAvatar.value = false
   }
-  input.value = ''
 }
 
 function extractProjects(data: unknown): ContentProject[] {
@@ -383,6 +587,9 @@ function extractProjects(data: unknown): ContentProject[] {
 
 function clearToken() {
   avatarRequestSequence += 1
+  isAvatarModalOpen.value = false
+  avatarEditorImage.value = null
+  revokeAvatarEditorObjectUrl()
   clearSession()
   localStorage.removeItem('framecraft.login')
   savedToken.value = ''
@@ -1042,6 +1249,7 @@ onBeforeUnmount(() => {
   window.removeEventListener(SESSION_CHANGED_EVENT, syncSession)
   speechRecognition?.stop()
   clearSelectedFile()
+  revokeAvatarEditorObjectUrl()
   if (gptProfileSaveTimeout) {
     window.clearTimeout(gptProfileSaveTimeout)
   }
@@ -1068,10 +1276,16 @@ onBeforeUnmount(() => {
 
     <section v-if="currentView === 'profile'" class="profile-layout">
       <aside class="panel profile-sidebar">
-        <div class="profile-avatar-large"><img v-if="avatarDataUrl" :src="avatarDataUrl" alt="Текущая аватарка" /><span v-else>{{ authAvatarLetter }}</span></div>
-        <div><p class="eyebrow">Профиль</p><h2>{{ authDisplayName }}</h2></div>
-        <label class="avatar-upload">Новая аватарка<span class="avatar-file-picker">{{ isUploadingAvatar ? 'Загружаю…' : 'Выбрать файл' }}</span><input type="file" accept="image/jpeg,image/png,image/webp" :disabled="isUploadingAvatar || isLoadingAvatar || !hasToken" @change="selectAvatar" /><small>{{ avatarFileName }}</small></label>
-        <p class="form-hint">PNG, JPEG или WebP, до 3 МБ. Аватар хранится в вашем профиле.</p><p v-if="isLoadingAvatar" class="muted">Загружаю аватар…</p><p v-if="avatarError" class="error-message">{{ avatarError }}</p>
+        <div class="profile-avatar-editor">
+          <div class="profile-avatar-large"><img v-if="avatarDataUrl" :src="avatarDataUrl" alt="Текущая аватарка" /><span v-else>{{ authAvatarLetter }}</span></div>
+          <button type="button" class="avatar-edit-button" :aria-label="avatarDataUrl ? 'Заменить аватар' : 'Добавить аватар'" :title="avatarDataUrl ? 'Заменить аватар' : 'Добавить аватар'" :disabled="isLoadingAvatar || !hasToken" @click="openAvatarModal">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5V20h3.5L18.1 9.4l-3.5-3.5L4 16.5Zm16.7-9.8a1 1 0 0 0 0-1.4l-2-2a1 1 0 0 0-1.4 0l-1.6 1.6 3.5 3.5 1.5-1.7Z" /></svg>
+          </button>
+        </div>
+        <div>
+          <h2>{{ authDisplayName }}</h2>
+        </div>
+        <p v-if="isLoadingAvatar" class="muted">Загружаю аватар…</p>
       </aside>
       <form class="panel gpt-profile-form" :aria-busy="isLoadingProfile || isSavingProfile" @submit.prevent="saveGptProfile">
         <header class="gpt-profile-header"><div><p class="eyebrow">Персонализация AI</p><h2>Настройки для профессиональных текстов</h2><p class="muted">GPT будет учитывать эти данные при создании каждого ответа.</p></div><span class="ai-avatar">✦</span></header>
@@ -1101,6 +1315,64 @@ onBeforeUnmount(() => {
         <div class="profile-save-row"><p v-if="isLoadingProfile" class="muted">Загружаю настройки…</p><p v-else-if="profileError" class="error-message">{{ profileError }}</p><p v-else-if="gptProfileSaved" class="success-message">Настройки сохранены</p><button type="submit" :disabled="isLoadingProfile || isSavingProfile || !selectedWorkspace">{{ isSavingProfile ? 'Сохраняю…' : 'Сохранить настройки' }}</button></div>
       </form>
     </section>
+
+    <div v-if="isAvatarModalOpen" class="modal-backdrop" @click.self="closeAvatarModal">
+      <section ref="avatarModal" class="auth-modal avatar-modal" role="dialog" aria-modal="true" aria-labelledby="avatar-modal-title" @keydown="handleAvatarKeydown">
+        <div class="modal-header">
+          <div><p class="eyebrow">Фото профиля</p><h2 id="avatar-modal-title">{{ avatarDataUrl ? 'Заменить аватар' : 'Добавить аватар' }}</h2></div>
+          <button type="button" class="icon-button secondary" aria-label="Закрыть" :disabled="isUploadingAvatar" @click="closeAvatarModal"><span aria-hidden="true">×</span></button>
+        </div>
+
+        <div class="avatar-modal-content">
+          <div v-if="avatarEditorImage" class="avatar-crop-stage">
+            <canvas
+              ref="avatarEditorCanvas"
+              class="avatar-crop-canvas"
+              width="512"
+              height="512"
+              tabindex="0"
+              aria-label="Область обрезки. Перетаскивайте изображение, чтобы выбрать положение."
+              @pointerdown="startAvatarDrag"
+              @pointermove="moveAvatarDrag"
+              @pointerup="stopAvatarDrag"
+              @pointercancel="stopAvatarDrag"
+              @keydown="moveAvatarWithKeyboard"
+            ></canvas>
+            <span class="avatar-crop-grid" aria-hidden="true"></span>
+            <span class="avatar-crop-hint">Перетаскивайте фото</span>
+          </div>
+          <div v-else class="avatar-editor-empty">
+            <div class="avatar-editor-placeholder"><img v-if="avatarDataUrl" :src="avatarDataUrl" alt="Текущий аватар" /><span v-else>{{ authAvatarLetter }}</span></div>
+            <p>Выберите изображение, затем настройте его положение и масштаб.</p>
+          </div>
+
+          <label class="avatar-file-control">
+            <span class="avatar-file-picker">{{ avatarEditorImage ? 'Выбрать другое фото' : 'Выбрать фото' }}</span>
+            <input type="file" accept="image/jpeg,image/png,image/webp" :disabled="isUploadingAvatar" @change="selectAvatar" />
+            <small>{{ avatarFileName }}</small>
+          </label>
+
+          <div v-if="avatarEditorImage" class="avatar-editor-controls">
+            <label class="avatar-zoom-control"><span>Масштаб</span><output>{{ Math.round(avatarEditorZoom * 100) }}%</output><input v-model.number="avatarEditorZoom" type="range" min="1" max="3" step="0.01" aria-label="Масштаб изображения" @input="updateAvatarZoom" /></label>
+            <div class="avatar-tool-row" aria-label="Инструменты изображения">
+              <button type="button" class="secondary" aria-label="Повернуть влево" title="Повернуть влево" @click="rotateAvatarEditor(-1)">↶ <span>Влево</span></button>
+              <button type="button" class="secondary" aria-label="Повернуть вправо" title="Повернуть вправо" @click="rotateAvatarEditor(1)">↷ <span>Вправо</span></button>
+              <button type="button" class="secondary" @click="resetAvatarEditor">Сбросить</button>
+            </div>
+          </div>
+
+          <div class="avatar-rules">
+            <strong>Требования к изображению</strong>
+            <ul><li>PNG, JPEG или WebP размером до 3 МБ</li><li>Лучше использовать квадратное фото от 512 × 512 px</li><li>Видимая область будет сохранена в профиле в формате WebP</li></ul>
+          </div>
+          <p v-if="avatarError" class="error-message" role="alert">{{ avatarError }}</p>
+          <div class="avatar-modal-actions">
+            <button type="button" class="secondary" :disabled="isUploadingAvatar" @click="closeAvatarModal">Отмена</button>
+            <button type="button" :disabled="!avatarEditorImage || isUploadingAvatar" @click="saveAvatar">{{ isUploadingAvatar ? 'Сохраняю…' : 'Сохранить аватар' }}</button>
+          </div>
+        </div>
+      </section>
+    </div>
 
     <div v-if="isAuthOpen" class="modal-backdrop" @click.self="closeAuth">
       <section ref="authModal" class="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title" @keydown="handleAuthKeydown">
