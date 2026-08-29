@@ -48,6 +48,11 @@ const isAuthSubmitting = ref(false)
 const authError = ref('')
 const authNotice = ref('')
 const currentView = ref<'home' | 'text' | 'image' | 'publish' | 'profile'>('home')
+const colorTheme = ref<'light' | 'dark'>((localStorage.getItem('framecraft.theme') as 'light' | 'dark' | null) ?? 'light')
+watch(colorTheme, (theme) => {
+  document.documentElement.dataset.theme = theme
+  localStorage.setItem('framecraft.theme', theme)
+}, { immediate: true })
 const avatarDataUrl = ref(localStorage.getItem('framecraft.avatar') || '')
 const avatarError = ref('')
 const avatarFileName = ref('Файл не выбран')
@@ -125,7 +130,55 @@ const generationForm = reactive<{ template_key: TextTemplateKey; topic: string; 
   topic: '',
   input: '{\n  "tone": "friendly"\n}',
 })
+const defaultPostGoals = [
+  'Получить записи', 'Показать работу', 'Продать услугу', 'Привлечь новых клиентов',
+  'Повысить доверие', 'Показать экспертность', 'Дать полезную информацию', 'Вовлечь аудиторию',
+  'Рассказать о себе', 'Поделиться новостью', 'Рассказать об акции',
+]
+const postGoalGroups = [
+  { title: 'Продажи и клиенты', goals: ['Получить записи', 'Продать услугу', 'Продать товар', 'Рассказать об акции', 'Заполнить свободные окна', 'Привлечь новых клиентов', 'Вернуть старых клиентов', 'Предложить дополнительную услугу', 'Анонсировать новую услугу'] },
+  { title: 'Работы и портфолио', goals: ['Показать работу', 'Показать результат «до / после»', 'Показать процесс работы', 'Показать необычный случай', 'Продемонстрировать мастерство', 'Показать разнообразие работ', 'Рассказать историю клиента'] },
+  { title: 'Доверие и экспертность', goals: ['Повысить доверие', 'Показать экспертность', 'Дать полезную информацию', 'Дать полезный совет', 'Ответить на частый вопрос', 'Развеять миф', 'Объяснить процедуру / услугу', 'Рассказать об используемых материалах', 'Объяснить цену', 'Рассказать о безопасности и качестве', 'Поделиться профессиональным мнением'] },
+  { title: 'Вовлечение', goals: ['Вовлечь аудиторию', 'Получить комментарии', 'Задать вопрос аудитории', 'Провести опрос', 'Начать обсуждение', 'Узнать мнение подписчиков', 'Предложить выбрать вариант', 'Получить реакции', 'Побудить сохранить пост', 'Побудить поделиться постом'] },
+  { title: 'Личный бренд', goals: ['Рассказать о себе', 'Познакомиться с аудиторией', 'Рассказать свою историю', 'Поделиться личным опытом', 'Рассказать о ценностях', 'Показать себя за работой', 'Показать закулисье', 'Поделиться достижением', 'Рассказать об обучении / повышении квалификации', 'Познакомить с командой'] },
+  { title: 'Информационные', goals: ['Поделиться новостью', 'Сообщить новость', 'Анонсировать событие', 'Рассказать об изменениях', 'Сообщить новый график', 'Рассказать о новом месте / кабинете', 'Объяснить правила записи', 'Напомнить важную информацию', 'Ответить сразу на несколько вопросов'] },
+]
+const savedPostGoals = localStorage.getItem('framecraft.favorite-post-goals')
+const favoritePostGoals = ref<string[]>((savedPostGoals ? JSON.parse(savedPostGoals) as string[] : [...defaultPostGoals]).filter((goal) => goal !== 'Другое'))
+const selectedPostGoal = ref('')
+const customPostGoal = ref('')
+const isPostGoalSettingsOpen = ref(false)
+const isPostGoalSelectOpen = ref(false)
+const predefinedPostGoals = new Set(postGoalGroups.flatMap((group) => group.goals))
+const customPostGoals = computed(() => favoritePostGoals.value.filter((goal) => !predefinedPostGoals.has(goal)))
+
+function toggleFavoritePostGoal(goal: string) {
+  favoritePostGoals.value = favoritePostGoals.value.includes(goal)
+    ? favoritePostGoals.value.filter((item) => item !== goal)
+    : [...favoritePostGoals.value, goal]
+}
+
+function saveCustomPostGoal() {
+  const goal = customPostGoal.value.trim()
+  if (!goal || goal === 'Другое') return
+  if (!favoritePostGoals.value.includes(goal)) favoritePostGoals.value = [...favoritePostGoals.value, goal]
+  selectedPostGoal.value = goal
+  customPostGoal.value = ''
+}
+
+function deleteCustomPostGoal(goal: string) {
+  if (!window.confirm(`Удалить цель «${goal}»?`)) return
+  favoritePostGoals.value = favoritePostGoals.value.filter((item) => item !== goal)
+  if (selectedPostGoal.value === goal) selectedPostGoal.value = ''
+}
+
+watch(favoritePostGoals, (goals) => {
+  localStorage.setItem('framecraft.favorite-post-goals', JSON.stringify(goals))
+  if (selectedPostGoal.value && selectedPostGoal.value !== 'Другое' && !goals.includes(selectedPostGoal.value)) selectedPostGoal.value = ''
+}, { deep: true })
 const isGeneratingText = ref(false)
+const isImprovingIdea = ref(false)
+const isImproveIdeaEnabled = ref(false)
 const generationError = ref('')
 const chatScroll = ref<HTMLElement | null>(null)
 const chatTextarea = ref<HTMLTextAreaElement | null>(null)
@@ -167,6 +220,12 @@ const chatMessages = computed(() => {
     .map((message) => ({ id: message.id, role: 'user' as const, body: message.body, createdAt: message.createdAt }))
   const answers = textVersions.value.map((version) => ({ id: version.id, role: 'assistant' as const, body: version.body, createdAt: version.created_at }))
   return [...prompts, ...answers].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+})
+const effectivePostGoal = computed(() => selectedPostGoal.value === 'Другое' ? customPostGoal.value.trim() : selectedPostGoal.value)
+const canEnableImproveIdea = computed(() => Boolean(generationForm.topic.trim() || effectivePostGoal.value))
+
+watch(canEnableImproveIdea, (canEnable) => {
+  if (!canEnable && !isGeneratingText.value) isImproveIdeaEnabled.value = false
 })
 
 const hasToken = computed(() => savedToken.value.trim().length > 0)
@@ -769,7 +828,7 @@ async function loadTextVersions() {
   setLastResponse(result)
   textVersions.value = result.ok ? result.data?.text_versions ?? [] : []
   if (!result.ok) generationError.value = extractErrorMessage(result.error, 'Не удалось загрузить версии текста.')
-  await scrollChatToBottom()
+  await scrollChatToBottom('auto')
 }
 
 function toggleAudience(audience: string) {
@@ -800,7 +859,15 @@ function saveChatPrompts() {
 
 async function scrollChatToBottom(behavior: ScrollBehavior = 'smooth') {
   await nextTick()
-  chatScroll.value?.scrollTo({ top: chatScroll.value.scrollHeight, behavior })
+  const chat = chatScroll.value
+  if (!chat) return
+  if (behavior === 'auto') {
+    chat.style.scrollBehavior = 'auto'
+    chat.scrollTop = chat.scrollHeight
+    requestAnimationFrame(() => { chat.style.scrollBehavior = '' })
+    return
+  }
+  chat.scrollTo({ top: chat.scrollHeight, behavior })
 }
 
 watch(
@@ -880,6 +947,10 @@ function toggleSpeechInput() {
 
 async function generateText() {
   if (!selectedProject.value) return
+  if (isImproveIdeaEnabled.value) {
+    await improveIdea()
+    return
+  }
   if (!generationForm.topic.trim()) {
     generationError.value = 'Укажите тему текста.'
     return
@@ -893,6 +964,9 @@ async function generateText() {
   }
   input.topic = generationForm.topic.trim()
   input.profile = { ...gptProfile }
+  input.conversation = chatMessages.value.slice(-8).map(({ role, body }) => ({ role, body }))
+  const postGoal = selectedPostGoal.value === 'Другое' ? customPostGoal.value.trim() : selectedPostGoal.value
+  if (postGoal) input.post_goal = postGoal
   if (new TextEncoder().encode(JSON.stringify(input)).length > 16 * 1024) {
     generationError.value = 'JSON input превышает ограничение 16 КиБ.'
     return
@@ -919,6 +993,54 @@ async function generateText() {
   if (result.ok && result.data) textVersions.value = [result.data.text_version, ...textVersions.value]
   else generationError.value = extractErrorMessage(result.error, 'Не удалось сгенерировать текст.')
   isGeneratingText.value = false
+  await scrollChatToBottom()
+}
+
+async function improveIdea() {
+  if (!selectedProject.value) return
+  const idea = generationForm.topic.trim()
+  const postGoal = effectivePostGoal.value
+  if (!idea && !postGoal) {
+    generationError.value = 'Напишите идею или выберите цель поста.'
+    return
+  }
+
+  const input: Record<string, unknown> = {
+    mode: 'clarify_idea',
+    topic: idea || postGoal,
+    draft_idea: idea,
+    profile: { ...gptProfile },
+    post_goal: postGoal || undefined,
+    conversation: chatMessages.value.slice(-8).map(({ role, body }) => ({ role, body })),
+    instruction: 'Не создавай готовый пост. Проанализируй идею и профиль автора, определи, какой важной информации не хватает, и задай только 2–3 конкретных полезных вопроса. Не задавай вопросы, ответы на которые уже есть в профиле или истории диалога.',
+  }
+  if (new TextEncoder().encode(JSON.stringify(input)).length > 16 * 1024) {
+    generationError.value = 'Данные для улучшения идеи превышают ограничение 16 КиБ.'
+    return
+  }
+
+  isGeneratingText.value = true
+  isImprovingIdea.value = true
+  generationError.value = ''
+  chatPrompts.value.push({ id: `prompt-${Date.now()}`, projectID: selectedProject.value.id, body: idea || `Цель поста: ${postGoal}`, createdAt: new Date().toISOString() })
+  saveChatPrompts()
+  generationForm.topic = ''
+  await nextTick()
+  resizeChatTextarea()
+  await scrollChatToBottom()
+
+  const result = await apiRequest<CreateTextGenerationResponse>('POST', `/v1/content-projects/${selectedProject.value.id}/text-generations`, {
+    token: savedToken.value,
+    body: JSON.stringify({ template_key: 'free_form', input }),
+  })
+  setLastResponse(result)
+  if (result.ok && result.data) {
+    textVersions.value = [result.data.text_version, ...textVersions.value]
+    isImproveIdeaEnabled.value = false
+  }
+  else generationError.value = extractErrorMessage(result.error, 'Не удалось улучшить идею.')
+  isGeneratingText.value = false
+  isImprovingIdea.value = false
   await scrollChatToBottom()
 }
 
@@ -1229,12 +1351,70 @@ onBeforeUnmount(() => {
             <footer class="chat-composer-wrap">
               <p v-if="generationError" class="error-message chat-error">{{ generationError }}</p>
               <p v-if="speechError" class="error-message chat-error">{{ speechError }}</p>
+              <div class="post-goal-control">
+                <div class="improve-idea-control">
+                  <button type="button" class="improve-idea-switch" :class="{ active: isImproveIdeaEnabled }" role="switch" aria-label="Улучшить идею" :aria-checked="isImproveIdeaEnabled" :data-tooltip="isGeneratingText ? 'Дождитесь завершения текущего ответа.' : canEnableImproveIdea ? (isImproveIdeaEnabled ? 'Улучшение идеи включено. При отправке AI задаст 2–3 вопроса.' : 'Включить улучшение идеи перед отправкой.') : 'Чтобы включить улучшение идеи, выберите цель поста или напишите текст.'" :disabled="isGeneratingText || !canEnableImproveIdea" @click="isImproveIdeaEnabled = !isImproveIdeaEnabled">
+                    <span aria-hidden="true"></span>
+                  </button>
+                  <span>Улучшить идею</span>
+                </div>
+                <div class="post-goal-field">
+                  <label>Цель поста</label>
+                  <div v-if="selectedPostGoal === 'Другое'" class="custom-post-goal-inline">
+                    <input v-model="customPostGoal" class="custom-post-goal" type="text" maxlength="160" placeholder="Напишите свою цель" autofocus @keydown.enter.prevent="saveCustomPostGoal" />
+                    <button type="button" class="save-custom-post-goal" aria-label="Сохранить цель" data-tooltip="Сохранить" :disabled="!customPostGoal.trim()" @click="saveCustomPostGoal">✓</button>
+                  </div>
+                  <div v-else class="profile-custom-select post-goal-select" :class="{ open: isPostGoalSelectOpen }">
+                    <button type="button" class="custom-select-trigger" :class="{ placeholder: !selectedPostGoal }" :aria-expanded="isPostGoalSelectOpen" @click="isPostGoalSelectOpen = !isPostGoalSelectOpen">
+                      <span>{{ selectedPostGoal || 'Выберите цель' }}</span><i></i>
+                    </button>
+                    <div v-if="isPostGoalSelectOpen" class="custom-select-menu">
+                      <button type="button" class="placeholder" :class="{ selected: !selectedPostGoal }" @click="selectedPostGoal = ''; isPostGoalSelectOpen = false">Выберите цель<span v-if="!selectedPostGoal">✓</span></button>
+                      <button v-for="goal in favoritePostGoals" :key="goal" type="button" :class="{ selected: selectedPostGoal === goal }" @click="selectedPostGoal = goal; isPostGoalSelectOpen = false">{{ goal }}<span v-if="selectedPostGoal === goal">✓</span></button>
+                      <button type="button" :class="{ selected: selectedPostGoal === 'Другое' }" @click="selectedPostGoal = 'Другое'; isPostGoalSelectOpen = false">Другое<span v-if="selectedPostGoal === 'Другое'">✓</span></button>
+                    </div>
+                  </div>
+                  <button type="button" class="post-goal-settings-button" aria-label="Настроить список" data-tooltip="Настроить список" :aria-expanded="isPostGoalSettingsOpen" @click="isPostGoalSettingsOpen = !isPostGoalSettingsOpen">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 8.95 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.58 15 1.7 1.7 0 0 0 3 14H3v-4h.08A1.7 1.7 0 0 0 4.6 8.95a1.7 1.7 0 0 0-.34-1.88L4.2 7l2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.58 1.7 1.7 0 0 0 10 3h4v.08a1.7 1.7 0 0 0 1.03 1.52 1.7 1.7 0 0 0 1.88-.34l.06-.06L19.8 7l-.06.06A1.7 1.7 0 0 0 19.4 9 1.7 1.7 0 0 0 21 10h.08v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>
+                  </button>
+                </div>
+              </div>
+              <Teleport to="body">
+                <div v-if="isPostGoalSettingsOpen" class="post-goal-modal-backdrop" role="presentation" @click.self="isPostGoalSettingsOpen = false">
+                  <section class="post-goal-modal" role="dialog" aria-modal="true" aria-labelledby="post-goal-modal-title">
+                    <header class="post-goal-modal-header">
+                      <div class="post-goal-catalog-heading"><strong id="post-goal-modal-title">Добавьте частые цели поста</strong><small>Отмеченные варианты появятся в основном списке.</small></div>
+                      <button type="button" class="post-goal-modal-close" aria-label="Закрыть" @click="isPostGoalSettingsOpen = false">×</button>
+                    </header>
+                    <div class="post-goal-catalog">
+                      <div class="post-goal-groups">
+                        <section v-for="group in postGoalGroups" :key="group.title" class="post-goal-group">
+                          <h3>{{ group.title }}</h3>
+                          <label v-for="goal in group.goals" :key="goal">
+                            <input type="checkbox" :checked="favoritePostGoals.includes(goal)" @change="toggleFavoritePostGoal(goal)" />
+                            <span>{{ goal }}</span>
+                          </label>
+                        </section>
+                        <section class="post-goal-group custom-goal-group">
+                          <h3>Другое</h3>
+                          <p v-if="!customPostGoals.length" class="custom-goals-empty">Здесь появятся цели, которые вы добавите вручную.</p>
+                          <div v-for="goal in customPostGoals" :key="goal" class="custom-goal-item">
+                            <span>{{ goal }}</span>
+                            <button type="button" aria-label="Удалить цель" :title="`Удалить «${goal}»`" @click="deleteCustomPostGoal(goal)">×</button>
+                          </div>
+                        </section>
+                      </div>
+                    </div>
+                    <footer class="post-goal-modal-footer"><button type="button" @click="isPostGoalSettingsOpen = false">Готово</button></footer>
+                  </section>
+                </div>
+              </Teleport>
               <div class="chat-composer">
                 <textarea ref="chatTextarea" v-model="generationForm.topic" rows="1" placeholder="Напишите, какой текст хотите создать…" aria-label="Сообщение" @input="resizeChatTextarea" @keydown="handleChatKeydown" />
                 <button type="button" class="mic-button" :class="{ listening: isListening }" :aria-label="isListening ? 'Остановить голосовой ввод' : 'Начать голосовой ввод'" :title="isListening ? 'Остановить запись' : 'Голосовой ввод'" @click="toggleSpeechInput">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6"/></svg>
                 </button>
-                <button type="button" class="send-button" :disabled="isGeneratingText || !generationForm.topic.trim()" aria-label="Отправить сообщение" @click="generateText">
+                <button type="button" class="send-button" :disabled="isGeneratingText || (!generationForm.topic.trim() && !(isImproveIdeaEnabled && effectivePostGoal))" aria-label="Отправить сообщение" @click="generateText">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6-7-1Z"/><path d="m12 13 7-8"/></svg>
                 </button>
               </div>
@@ -1379,6 +1559,10 @@ onBeforeUnmount(() => {
         <div><p class="eyebrow">Профиль</p><h2>{{ authDisplayName }}</h2></div>
         <label class="avatar-upload">Новая аватарка<span class="avatar-file-picker">Выбрать файл</span><input type="file" accept="image/*" @change="selectAvatar" /><small>{{ avatarFileName }}</small></label>
         <p class="form-hint">PNG, JPEG или WebP, до 3 МБ.</p><p v-if="avatarError" class="error-message">{{ avatarError }}</p>
+        <div class="theme-setting">
+          <span>Тёмная тема</span>
+          <button type="button" class="theme-switch" :class="{ active: colorTheme === 'dark' }" role="switch" :aria-checked="colorTheme === 'dark'" :aria-label="colorTheme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'" @click="colorTheme = colorTheme === 'dark' ? 'light' : 'dark'"><span></span></button>
+        </div>
       </aside>
       <form class="panel gpt-profile-form" @submit.prevent="saveGptProfile">
         <header class="gpt-profile-header"><div><p class="eyebrow">Персонализация AI</p><h2>Настройки для профессиональных текстов</h2><p class="muted">GPT будет учитывать эти данные при создании каждого ответа.</p></div><span class="ai-avatar">✦</span></header>
