@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import { apiRequest, buildApiUrl } from '@/api'
+import { loadAppNavigationState, saveAppNavigationState } from '@/app-state'
 import { authRequest } from '@/auth-api'
 import AppHeader from '@/components/AppHeader.vue'
 import HomeHero from '@/components/HomeHero.vue'
@@ -42,6 +43,7 @@ import type {
   Workspace,
 } from '@/types'
 
+const initialNavigationState = loadAppNavigationState()
 const savedToken = ref(getAccessToken())
 const refreshToken = ref(getRefreshToken())
 const savedLogin = ref(localStorage.getItem('framecraft.login') || '')
@@ -53,7 +55,7 @@ const authError = ref('')
 const authNotice = ref('')
 const authModal = ref<HTMLElement | null>(null)
 let authTrigger: HTMLElement | null = null
-const currentView = ref<AppView>('home')
+const currentView = ref<AppView>(initialNavigationState.view)
 const avatarDataUrl = ref('')
 const avatarError = ref('')
 const avatarFileName = ref('Файл не выбран')
@@ -120,6 +122,14 @@ const isGeneratingText = ref(false)
 const generationError = ref('')
 const isListening = ref(false)
 const speechError = ref('')
+
+watch(
+  [currentView, () => selectedWorkspace.value?.id ?? '', () => selectedProject.value?.id ?? ''],
+  ([view, workspaceID, projectID]) => {
+    saveAppNavigationState({ view: view as AppView, workspaceID, projectID })
+  },
+  { flush: 'sync' },
+)
 
 interface SpeechRecognitionEventLike extends Event {
   results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }>
@@ -507,8 +517,9 @@ async function loadWorkspaces() {
 
     if (result.ok) {
       workspaces.value = extractWorkspaces(result.data)
+      const preferredWorkspaceID = selectedWorkspace.value?.id || initialNavigationState.workspaceID
       selectedWorkspace.value =
-        workspaces.value.find((workspace) => workspace.id === selectedWorkspace.value?.id) ??
+        workspaces.value.find((workspace) => workspace.id === preferredWorkspaceID) ??
         workspaces.value[0] ??
         null
 
@@ -700,7 +711,8 @@ async function loadProjects() {
 
     if (result.ok) {
       projects.value = extractProjects(result.data)
-      selectedProject.value = projects.value.find(({ id }) => id === selectedProject.value?.id) ?? projects.value[0] ?? null
+      const preferredProjectID = selectedProject.value?.id || initialNavigationState.projectID
+      selectedProject.value = projects.value.find(({ id }) => id === preferredProjectID) ?? projects.value[0] ?? null
       if (selectedProject.value) await loadConversation()
       else chatMessages.value = []
     } else {
