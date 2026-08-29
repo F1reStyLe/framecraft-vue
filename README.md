@@ -43,3 +43,19 @@ If backend CORS is enabled, direct requests are also possible:
 ```env
 VITE_API_BASE_URL=http://localhost:8180
 ```
+
+## Run the complete local stack
+
+The FrameCraft backend repository contains the shared Docker Compose setup for the frontend,
+auth service, both PostgreSQL databases, Redis, MinIO, API, worker, and scheduler.
+
+With the three repositories in their standard sibling directories, run:
+
+```bash
+cd ../../go/FrameCraft
+docker compose up --build -d
+```
+
+Open `http://localhost:5173`. The Compose stack builds the frontend and serves the static output
+through Nginx. Nginx proxies `/api` and `/auth-api` to the internal Compose services. Running
+`npm run dev` directly still uses the configurable Vite proxy targets from `.env.local`.
