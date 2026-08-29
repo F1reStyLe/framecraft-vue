@@ -761,8 +761,7 @@ button.icon-button span {
 }
 
 .button-row,
-.workspace-form,
-.debug-json {
+.workspace-form {
   display: grid;
   gap: 0.8rem;
 }
@@ -1655,52 +1654,6 @@ dd {
   font-size: 0.92rem;
 }
 
-.debug-drawer {
-  display: grid;
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-
-.debug-toggle {
-  justify-self: center;
-  color: #fff;
-  background: #e393b0;
-  box-shadow: 0 10px 24px rgba(227, 147, 176, 0.24);
-}
-
-.debug-panel {
-  box-shadow: none;
-}
-
-.debug-grid {
-  display: grid;
-  grid-template-columns: 0.5fr 1.5fr 0.6fr;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-}
-
-.debug-grid div {
-  display: grid;
-  gap: 0.35rem;
-}
-
-.debug-grid span {
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 950;
-  text-transform: uppercase;
-}
-
-.debug-json {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.debug-json h3 {
-  margin: 0 0 0.5rem;
-  color: #574951;
-  font-size: 0.92rem;
-}
-
 @media (max-width: 1020px) {
   .profile-layout { grid-template-columns: 1fr; }
   .profile-sidebar { position: static; }
@@ -1857,9 +1810,7 @@ dd {
   .project-list,
   .how-grid,
   .workspace-grid,
-  dl,
-  .debug-grid,
-  .debug-json {
+  dl {
     grid-template-columns: 1fr;
   }
 }

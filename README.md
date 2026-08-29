@@ -10,6 +10,16 @@ npm install
 npm run dev
 ```
 
+Quality checks:
+
+```bash
+npm test
+npm run build
+npm run verify:contract
+```
+
+`verify:contract` compares the API paths and media fields used by the frontend with the live local OpenAPI contract at `http://localhost:8180/swagger/openapi.yaml`.
+
 Frontend: http://localhost:5173
 
 Backend default: http://localhost:8180

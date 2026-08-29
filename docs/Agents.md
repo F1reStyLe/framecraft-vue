@@ -53,10 +53,15 @@ Do not duplicate Auth Service password-validity rules in the frontend. Send the 
 - No Vue Router
 - No Pinia
 
-The code is intentionally compact and direct. Most UI behavior lives in:
+`App.vue` coordinates feature state. UI areas are isolated into components:
 
 ```text
-src/App.vue
+src/components/AppHeader.vue
+src/components/HomeHero.vue
+src/components/WorkspaceCreateForm.vue
+src/components/WorkspaceList.vue
+src/components/TextChat.vue
+src/components/MediaLibrary.vue
 ```
 
 Small shared pieces:
@@ -81,7 +86,6 @@ Primary flow:
 3. Refresh/list workspaces.
 4. Select a workspace card and view details.
 
-Technical/debug details are still available, but they are intentionally hidden behind a collapsible "technical response" drawer.
 
 ## Implemented sections
 
@@ -97,7 +101,7 @@ The current screen includes:
    - registration with username, email, and password
    - login by email or username and password
    - logout revokes the refresh session
-   - access and refresh tokens are stored in `localStorage`
+   - access and refresh tokens are stored in browser cookies; protected requests attach the bearer header automatically
    - password validity is checked only by Auth Service
 
 3. Create Workspace
@@ -143,7 +147,9 @@ Protected requests send:
 Authorization: Bearer <saved-token>
 ```
 
-Registration, login, and logout are implemented through Auth Service. Access and refresh tokens are stored in `localStorage`; protected FrameCraft requests use the saved access token.
+Registration, login, and logout are implemented through Auth Service. Access and refresh tokens are stored in browser cookies; protected FrameCraft requests use the saved access token automatically.
+
+Frontend-created cookies use `SameSite=Lax` and `Secure` on HTTPS. They cannot be `HttpOnly` while Auth Service returns tokens in a response body; that final hardening requires Auth Service to issue the cookie itself.
 
 Important identity detail:
 
@@ -263,7 +269,6 @@ Generated folders such as `node_modules` and `dist` exist locally after install/
 
 ## Deliberately not implemented
 
-- automatic refresh token flow
 - user management
 - mocked backend responses
 - routing
@@ -278,3 +283,8 @@ contract limit.
 
 Media UI supports image-only upload, cursor pagination, workspace summary, original/thumbnail
 presigned links, and soft deletion. The browser input follows the backend `image/*` MIME restriction.
+
+## Quality checks
+
+- `npm test` verifies API-response parsing used by both API clients.
+- `npm run verify:contract` reads the live FrameCraft OpenAPI endpoint and validates the paths and media fields used by the frontend.

@@ -8,5 +8,5 @@ export const AUTH_API_BASE_URL =
 export const API_DISPLAY_URL =
   API_BASE_URL === '/api' ? '/api → http://localhost:8180' : API_BASE_URL
 
-export const TOKEN_STORAGE_KEY = 'framecraft.accessToken'
-export const REFRESH_TOKEN_STORAGE_KEY = 'framecraft.refreshToken'
+export const ACCESS_TOKEN_COOKIE_NAME = 'framecraft.accessToken'
+export const REFRESH_TOKEN_COOKIE_NAME = 'framecraft.refreshToken'
