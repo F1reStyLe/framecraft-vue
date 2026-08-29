@@ -1,17 +1,6 @@
 import { AUTH_API_BASE_URL } from '@/config'
+import { parseResponseBody } from '@/http'
 import type { ApiResult } from '@/types'
-
-async function parseResponse(response: Response) {
-  const text = await response.text()
-
-  if (!text) return null
-
-  try {
-    return JSON.parse(text) as unknown
-  } catch {
-    return text
-  }
-}
 
 export async function authRequest<T = unknown>(
   method: string,
@@ -25,8 +14,9 @@ export async function authRequest<T = unknown>(
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      credentials: 'include',
     })
-    const payload = await parseResponse(response)
+    const payload = await parseResponseBody(response)
     const data = response.ok ? (payload as T) : null
     const error = response.ok ? null : payload
 
@@ -35,13 +25,6 @@ export async function authRequest<T = unknown>(
       statusCode: response.status,
       data,
       error,
-      debug: {
-        method,
-        url,
-        statusCode: response.status,
-        responseJson: data,
-        errorJson: error,
-      },
     }
   } catch (error) {
     const normalizedError =
@@ -52,13 +35,6 @@ export async function authRequest<T = unknown>(
       statusCode: null,
       data: null,
       error: normalizedError,
-      debug: {
-        method,
-        url,
-        statusCode: null,
-        responseJson: null,
-        errorJson: normalizedError,
-      },
     }
   }
 }

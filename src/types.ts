@@ -8,6 +8,52 @@ export type JsonValue =
 
 export type WorkspaceType = 'personal' | 'studio'
 
+export type AppView = 'home' | 'text' | 'image' | 'publish' | 'profile'
+
+export interface GptProfileSettings {
+  name: string
+  occupation: string
+  services: string
+  city: string
+  address: string
+  audiences: string[]
+  ageMin: number
+  ageMax: number
+  advantage: string
+  addressStyle: '' | 'ты' | 'вы'
+  emojiLevel: '' | 'none' | 'few' | 'medium' | 'many'
+  useHashtags: '' | 'yes' | 'no'
+  forbiddenTopics: string
+  postSignature: string
+  contacts: string
+  bookingUrl: string
+}
+
+export interface ChatMessage {
+  id: string
+  contentProjectID?: string
+  role: 'user' | 'assistant'
+  body: string
+  createdAt: string
+}
+
+export interface ProfileResponse {
+  profile: GptProfileSettings
+}
+
+export interface ChatMessagesResponse {
+  messages: ChatMessage[]
+}
+
+export interface UserProfile {
+  user_id: string
+  avatar_url?: string
+  avatar_url_expires_at?: string
+  avatar_mime_type?: 'image/jpeg' | 'image/png' | 'image/webp'
+  avatar_size_bytes?: number
+  avatar_updated_at?: string
+}
+
 export interface WorkspacePayload {
   name: string
   type: WorkspaceType
@@ -36,6 +82,7 @@ export interface MediaAsset {
   original_name: string
   mime_type: string
   size_bytes: number
+  has_thumbnail: boolean
   checksum_sha256?: string
   created_by: string
   created_at: string
@@ -173,20 +220,11 @@ export interface CreateMediaThumbnailURLResponse {
   thumbnail_url_expires_at: string
 }
 
-export interface ApiDebugSnapshot {
-  method: string
-  url: string
-  statusCode: number | null
-  responseJson: unknown
-  errorJson: unknown
-}
-
 export interface ApiResult<T = unknown> {
   ok: boolean
   statusCode: number | null
   data: T | null
   error: unknown
-  debug: ApiDebugSnapshot
 }
 
 export interface TokenResponse {
